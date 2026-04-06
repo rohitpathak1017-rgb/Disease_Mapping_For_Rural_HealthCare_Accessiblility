@@ -55,21 +55,21 @@ const Register = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center px-4 py-8">
-      <div className="bg-white rounded-2xl shadow-lg w-full max-w-md p-8">
+   <div className="box1">
+      <div className="box2">
 
         {/* Header */}
-        <div className="text-center mb-8">
-          <div className="w-14 h-14 bg-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
+        <div className="box3">
+          <div className="box4">
             <span className="text-white font-bold text-xl">DM</span>
           </div>
           <h1 className="text-2xl font-bold text-gray-800">Create Account</h1>
-          <p className="text-gray-500 text-sm mt-1">Register as a public user</p>
+          <p className="text-gray-500 text-sm mt-1">Register to get started</p>
         </div>
 
         {/* Error */}
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-600 text-sm rounded-lg px-4 py-3 mb-4">
+          <div className="box5">
             {error}
           </div>
         )}
@@ -78,24 +78,24 @@ const Register = () => {
         <form onSubmit={handleSubmit} className="space-y-4">
 
           {/* Name */}
-          <div>
+          <div className="box6">
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Full Name <span className="text-red-500">*</span>
+               <span className="text-red-500"></span>
             </label>
             <input
               type="text"
               name="name"
               value={formData.name}
               onChange={handleChange}
-              placeholder="Ramesh Kumar"
+              placeholder="Full Name"
               className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
 
           {/* Email */}
-          <div>
+          <div className="box7">
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Email Address <span className="text-red-500">*</span>
+               <span className="text-red-500"></span>
             </label>
             <input
               type="email"
@@ -108,9 +108,9 @@ const Register = () => {
           </div>
 
           {/* Password */}
-          <div>
+          <div className="box8">
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Password <span className="text-red-500">*</span>
+              <span className="text-red-500"></span>
             </label>
             <input
               type="password"
@@ -123,9 +123,9 @@ const Register = () => {
           </div>
 
           {/* Phone */}
-          <div>
+          <div className="box9">
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Phone Number
+              
             </label>
             <input
               type="tel"
@@ -138,11 +138,11 @@ const Register = () => {
           </div>
 
           {/* Location */}
-          <div className="border-t border-gray-100 pt-4">
+          <div className="box10">
             <p className="text-sm font-medium text-gray-700 mb-3">
-              Your Village Location (Optional)
+               (Optional)
             </p>
-            <div className="space-y-3">
+            <div className="box11">
               <input
                 type="text"
                 name="state"

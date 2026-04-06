@@ -1,91 +1,98 @@
 import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid,
+  Tooltip, Legend, ResponsiveContainer, Cell,
 } from "recharts";
 
+// ── Custom Tooltip ────────────────────────────────────────────────────────────
 const CustomTooltip = ({ active, payload, label }) => {
-  if (active && payload && payload.length) {
-    return (
-      <div style={{
-        background: "#1e293b",
-        border: "1px solid #334155",
-        borderRadius: "8px",
-        padding: "10px 14px",
-        fontSize: "13px",
-        color: "#e2e8f0",
-      }}>
-        <p style={{ fontWeight: 700, marginBottom: 6, color: "#94a3b8" }}>{label}</p>
-        {payload.map((entry) => (
-          <p key={entry.dataKey} style={{ color: entry.color, margin: "2px 0" }}>
-            {entry.name}: <strong>{entry.value}</strong>
-          </p>
-        ))}
-      </div>
-    );
-  }
-  return null;
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl shadow-lg p-3 text-sm">
+      <p className="font-semibold text-gray-700 mb-2">{label}</p>
+      {payload.map((p) => (
+        <div key={p.name} className="flex items-center gap-2">
+          <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: p.fill }} />
+          <span className="text-gray-600">{p.name}:</span>
+          <span className="font-bold text-gray-800">{p.value}</span>
+        </div>
+      ))}
+    </div>
+  );
 };
 
-// data format expected:
-// [{ disease: "Malaria", affected: 45, recovered: 30, deaths: 1 }, ...]
-const DiseaseBarChart = ({ data = [], title = "Disease Statistics" }) => {
+// ── Color Palette ─────────────────────────────────────────────────────────────
+const COLORS = [
+  "#3b82f6","#10b981","#f59e0b","#ef4444",
+  "#8b5cf6","#ec4899","#14b8a6","#f97316",
+];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Props:
+//   data        → array of objects e.g. [{ month:"Jan", Malaria:45, Dengue:20 }]
+//   keys        → array of disease names e.g. ["Malaria", "Dengue"]
+//   xKey        → key for x axis e.g. "month"
+//   title       → chart title string
+//   height      → chart height (default 320)
+//   stacked     → boolean — stacked bars (default false)
+// ─────────────────────────────────────────────────────────────────────────────
+const DiseaseBarChart = ({
+  data    = [],
+  keys    = [],
+  xKey    = "month",
+  title   = "Disease Report",
+  height  = 320,
+  stacked = false,
+}) => {
   if (!data.length) {
     return (
-      <div style={{
-        display: "flex", alignItems: "center", justifyContent: "center",
-        height: 300, color: "#64748b", fontSize: 14,
-        background: "#0f172a", borderRadius: 12, border: "1px dashed #334155"
-      }}>
-        No data available
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+        {title && <h3 className="text-base font-semibold text-gray-800 mb-4">{title}</h3>}
+        <div className="flex items-center justify-center h-40 text-gray-400 text-sm">
+          No data available
+        </div>
       </div>
     );
   }
 
   return (
-    <div style={{
-      background: "#0f172a",
-      borderRadius: 12,
-      border: "1px solid #1e293b",
-      padding: "20px 16px 8px",
-    }}>
+<div className="chart1">
       {title && (
-        <h3 style={{
-          margin: "0 0 20px 4px",
-          fontSize: 15,
-          fontWeight: 600,
-          color: "#e2e8f0",
-          letterSpacing: "0.3px",
-        }}>
-          {title}
-        </h3>
+        <h3 className="text-base font-semibold text-gray-800 mb-1">{title}</h3>
       )}
-      <ResponsiveContainer width="100%" height={300}>
-        <BarChart data={data} margin={{ top: 4, right: 16, left: -10, bottom: 4 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+      <p className="text-xs text-gray-400 mb-5">Affected patient count per period</p>
+
+      <ResponsiveContainer width="100%" height={height}>
+        <BarChart data={data} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}
+          barCategoryGap="30%">
+          <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
           <XAxis
-            dataKey="disease"
-            tick={{ fill: "#64748b", fontSize: 12 }}
-            axisLine={{ stroke: "#334155" }}
-            tickLine={false}
-          />
-          <YAxis
-            tick={{ fill: "#64748b", fontSize: 12 }}
+            dataKey={xKey}
+            tick={{ fontSize: 12, fill: "#6b7280" }}
             axisLine={false}
             tickLine={false}
           />
-          <Tooltip content={<CustomTooltip />} />
-          <Legend
-            wrapperStyle={{ fontSize: 12, color: "#94a3b8", paddingTop: 12 }}
+          <YAxis
+            tick={{ fontSize: 12, fill: "#6b7280" }}
+            axisLine={false}
+            tickLine={false}
+            width={35}
           />
-          <Bar dataKey="affected" name="Affected" fill="#f59e0b" radius={[4, 4, 0, 0]} />
-          <Bar dataKey="recovered" name="Recovered" fill="#10b981" radius={[4, 4, 0, 0]} />
-          <Bar dataKey="deaths" name="Deaths" fill="#ef4444" radius={[4, 4, 0, 0]} />
+          <Tooltip content={<CustomTooltip />} cursor={{ fill: "#f9fafb" }} />
+          <Legend
+            wrapperStyle={{ fontSize: "12px", paddingTop: "16px" }}
+            iconType="circle"
+            iconSize={8}
+          />
+          {keys.map((key, i) => (
+            <Bar
+              key={key}
+              dataKey={key}
+              fill={COLORS[i % COLORS.length]}
+              radius={stacked ? [0,0,0,0] : [6, 6, 0, 0]}
+              stackId={stacked ? "stack" : undefined}
+              maxBarSize={48}
+            />
+          ))}
         </BarChart>
       </ResponsiveContainer>
     </div>

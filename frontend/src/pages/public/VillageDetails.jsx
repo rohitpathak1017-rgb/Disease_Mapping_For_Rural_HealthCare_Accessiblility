@@ -1,232 +1,212 @@
-import { useState, useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
-import api from "../../services/api";
-import DiseaseBarChart from "../../components/charts/DiseaseBarChart";
+import { useParams, Link } from "react-router-dom";
+import Navbar from "../../components/Navbar.jsx";
+import LoadingSpinner from "../../components/LoadingSpinner.jsx";
+import ErrorMessage from "../../components/ErrorMessage.jsx";
+import useFetch from "../../hooks/useFetch.js";
+import useAuth from "../../hooks/useAuth.js";
+import { getVillageById } from "../../services/admin.service.js";
+import { getCampsByVillage } from "../../services/camp.service.js";
+import { getVillageChartData } from "../../services/report.service.js";
+import { formatDate } from "../../utils/helpers.js";
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid,
+  Tooltip, Legend, ResponsiveContainer,
+} from "recharts";
 
-const section = {
-  background: "#0f172a",
-  border: "1px solid #1e293b",
-  borderRadius: 12,
-  padding: 24,
-  marginBottom: 20,
-};
-
-const statusColors = {
-  Scheduled: "#3b82f6",
-  Ongoing:   "#10b981",
-  Completed: "#64748b",
-  Cancelled: "#ef4444",
-};
+const COLORS = ["#3b82f6","#10b981","#f59e0b","#ef4444","#8b5cf6"];
 
 const VillageDetails = () => {
   const { id } = useParams();
-  const navigate = useNavigate();
-  const [village, setVillage]   = useState(null);
-  const [camps, setCamps]       = useState([]);
-  const [reports, setReports]   = useState([]);
-  const [loading, setLoading]   = useState(true);
-  const [error, setError]       = useState("");
+  const { isLoggedIn } = useAuth();
 
-  useEffect(() => {
-    Promise.all([
-      api.get(`/villages/${id}`),
-      api.get(`/camps/village/${id}`),
-      api.get(`/reports?villageId=${id}`),
-    ]).then(([vRes, cRes, rRes]) => {
-      setVillage(vRes.data.data);
-      setCamps(cRes.data.data?.camps || []);
-      setReports(rRes.data.data?.reports || []);
-    }).catch(() => setError("Village not found"))
-      .finally(() => setLoading(false));
-  }, [id]);
+  const { data: village, loading: vLoad, error: vErr } = useFetch(() => getVillageById(id), [id]);
+  const { data: camps,   loading: cLoad }              = useFetch(() => getCampsByVillage(id), [id]);
+  const { data: chartData }                            = useFetch(
+    () => getVillageChartData(id, new Date().getFullYear()), [id]
+  );
 
-  // Build chart data from reports
-  const chartData = (() => {
+  // Bar chart data
+  const barData = () => {
+    if (!chartData?.length) return [];
     const map = {};
-    reports.forEach((r) => {
-      r.diseases?.forEach(({ disease, affectedCount, recoveredCount, deathCount }) => {
-        const name = disease?.name || "Unknown";
-        if (!map[name]) map[name] = { disease: name, affected: 0, recovered: 0, deaths: 0 };
-        map[name].affected  += affectedCount  || 0;
-        map[name].recovered += recoveredCount || 0;
-        map[name].deaths    += deathCount     || 0;
-      });
+    chartData.forEach((d) => {
+      const key = `${d.month}/${d.year}`;
+      if (!map[key]) map[key] = { month: key };
+      map[key][d.diseaseName] = (map[key][d.diseaseName] || 0) + d.totalAffected;
     });
     return Object.values(map);
-  })();
+  };
+  const diseaseNames = [...new Set(chartData?.map((d) => d.diseaseName) || [])];
 
-  if (loading) return <div style={{ textAlign: "center", padding: 80, color: "#64748b" }}>Loading...</div>;
-  if (error)   return <div style={{ textAlign: "center", padding: 80, color: "#ef4444" }}>{error}</div>;
-
-  const worker = village?.assignedHealthWorker;
+  if (vLoad) return <><Navbar /><LoadingSpinner fullScreen={false} /></>;
+  if (vErr)  return <><Navbar /><ErrorMessage message={vErr} /></>;
 
   return (
-    <div style={{ maxWidth: 900, margin: "0 auto", padding: "32px 20px", color: "#e2e8f0" }}>
+    <div className="min-h-screen bg-gray-50">
+      <Navbar />
+      <div className="max-w-5xl mx-auto px-4 py-8">
 
-      {/* Back */}
-      <button
-        onClick={() => navigate(-1)}
-        style={{ background: "none", border: "none", color: "#64748b", cursor: "pointer", fontSize: 14, marginBottom: 20 }}
-      >
-        ← Back
-      </button>
+        {/* Back */}
+        <Link to="/" className="text-sm text-blue-600 hover:underline mb-4 block">
+          ← Back to Villages
+        </Link>
 
-      {/* Village Header */}
-      <div style={{ ...section, borderColor: "#334155" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 12 }}>
-          <div>
-            <h1 style={{ margin: "0 0 6px", fontSize: 24, fontWeight: 700 }}>{village?.villageName}</h1>
-            <p style={{ margin: 0, color: "#64748b", fontSize: 14 }}>
-              {village?.subdistrict} · {village?.district} · {village?.state}
-            </p>
-            {village?.population && (
-              <p style={{ margin: "6px 0 0", color: "#94a3b8", fontSize: 13 }}>
-                👥 Population: {village.population.toLocaleString()}
-              </p>
+        {/* Village Header */}
+        {village && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-6">
+            <div className="flex justify-between items-start">
+              <div>
+                <h1 className="text-2xl font-bold text-gray-800">{village.villageName}</h1>
+                <p className="text-gray-500 text-sm mt-1">
+                  {village.subdistrict}, {village.district}, {village.state}
+                </p>
+              </div>
+              {village.assignedHealthWorker ? (
+                <span className="bg-green-100 text-green-700 text-xs font-semibold px-3 py-1 rounded-full">
+                  Worker Assigned
+                </span>
+              ) : (
+                <span className="bg-gray-100 text-gray-500 text-xs font-semibold px-3 py-1 rounded-full">
+                  No Worker
+                </span>
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mt-5">
+              {village.population > 0 && (
+                <div className="bg-gray-50 rounded-lg p-3">
+                  <p className="text-xs text-gray-500">Population</p>
+                  <p className="text-lg font-bold text-gray-800">
+                    {village.population.toLocaleString("en-IN")}
+                  </p>
+                </div>
+              )}
+              {village.assignedHealthWorker && (
+                <div className="bg-blue-50 rounded-lg p-3">
+                  <p className="text-xs text-gray-500">Health Worker</p>
+                  <p className="text-sm font-bold text-blue-700">
+                    {village.assignedHealthWorker.name}
+                  </p>
+                  <p className="text-xs text-gray-400">
+                    {village.assignedHealthWorker.qualification}
+                  </p>
+                </div>
+              )}
+              {village.activeDiseases?.length > 0 && (
+                <div className="bg-red-50 rounded-lg p-3">
+                  <p className="text-xs text-gray-500">Active Diseases</p>
+                  <p className="text-lg font-bold text-red-600">
+                    {village.activeDiseases.length}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Active Diseases tags */}
+            {village.activeDiseases?.length > 0 && (
+              <div className="mt-4 flex flex-wrap gap-2">
+                {village.activeDiseases.map((d) => (
+                  <span key={d._id} className="text-xs bg-red-50 text-red-600 border border-red-100 px-3 py-1 rounded-full">
+                    🦠 {d.name} — {d.category}
+                  </span>
+                ))}
+              </div>
             )}
           </div>
+        )}
 
-          {/* Assigned Worker Card */}
-          {worker && (
-            <div style={{
-              background: "#1e293b", borderRadius: 10, padding: "14px 18px", minWidth: 200,
-            }}>
-              <div style={{ fontSize: 11, color: "#64748b", marginBottom: 4 }}>ASSIGNED HEALTH WORKER</div>
-              <div style={{ fontWeight: 600, fontSize: 15 }}>{worker.name}</div>
-              {worker.qualification && (
-                <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 2 }}>{worker.qualification}</div>
-              )}
-              <button
-                onClick={() => navigate(`/feedback?workerId=${worker._id}&villageId=${id}`)}
-                style={{
-                  marginTop: 10, padding: "6px 14px",
-                  background: "#1d4ed8", border: "none", borderRadius: 6,
-                  color: "#fff", fontSize: 12, cursor: "pointer",
-                }}
-              >
-                Give Feedback
-              </button>
-            </div>
+        {/* Disease Chart */}
+        {chartData?.length > 0 && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-6">
+            <h2 className="text-lg font-semibold text-gray-800 mb-4">
+              📈 Disease Trend — {new Date().getFullYear()}
+            </h2>
+            <ResponsiveContainer width="100%" height={280}>
+              <BarChart data={barData()} margin={{ top:5, right:20, left:0, bottom:5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis dataKey="month" tick={{ fontSize:12 }} />
+                <YAxis tick={{ fontSize:12 }} />
+                <Tooltip />
+                <Legend />
+                {diseaseNames.map((name, i) => (
+                  <Bar key={name} dataKey={name} fill={COLORS[i % COLORS.length]} radius={[4,4,0,0]} />
+                ))}
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+
+        {/* Camps */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-6">
+          <h2 className="text-lg font-semibold text-gray-800 mb-4">🏕️ Health Camps</h2>
+          {cLoad && <LoadingSpinner fullScreen={false} size="sm" />}
+          {!cLoad && camps?.length === 0 && (
+            <p className="text-gray-500 text-sm text-center py-4">No camps organized yet</p>
           )}
-        </div>
-      </div>
-
-      {/* Disease Chart */}
-      {chartData.length > 0 && (
-        <div style={{ marginBottom: 20 }}>
-          <DiseaseBarChart data={chartData} title="Disease Statistics for this Village" />
-        </div>
-      )}
-
-      {/* Camps */}
-      <div style={section}>
-        <h2 style={{ margin: "0 0 16px", fontSize: 16, fontWeight: 600, color: "#94a3b8" }}>
-          🏕️ Healthcare Camps ({camps.length})
-        </h2>
-        {camps.length === 0 ? (
-          <p style={{ color: "#475569", fontSize: 14 }}>No camps have been held yet.</p>
-        ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {camps.map((camp) => (
-              <div key={camp._id} style={{
-                background: "#1e293b", borderRadius: 10, padding: "14px 18px",
-                display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 8,
-              }}>
-                <div>
-                  <div style={{ fontWeight: 600, fontSize: 14 }}>{camp.campName}</div>
-                  <div style={{ fontSize: 12, color: "#64748b", marginTop: 3 }}>
-                    📅 {new Date(camp.campDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
-                    {camp.startTime && <span> · ⏰ {camp.startTime} – {camp.endTime}</span>}
+          {camps?.length > 0 && (
+            <div className="space-y-3">
+              {camps.map((c) => (
+                <div key={c._id} className="border border-gray-100 rounded-lg p-4">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="font-medium text-gray-800">{c.campName}</p>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        📅 {formatDate(c.campDate)}
+                        {c.startTime && ` · ${c.startTime} - ${c.endTime}`}
+                      </p>
+                    </div>
+                    <span className={`text-xs font-semibold px-2 py-1 rounded-full
+                      ${c.status === "Completed" ? "bg-gray-100 text-gray-600" :
+                        c.status === "Ongoing"   ? "bg-green-100 text-green-700" :
+                                                   "bg-blue-100 text-blue-700"}`}>
+                      {c.status}
+                    </span>
                   </div>
-                  {camp.servicesOffered?.length > 0 && (
-                    <div style={{ marginTop: 8, display: "flex", flexWrap: "wrap", gap: 6 }}>
-                      {camp.servicesOffered.map((s) => (
-                        <span key={s} style={{
-                          padding: "2px 10px", borderRadius: 20,
-                          background: "#0f172a", color: "#94a3b8", fontSize: 11, border: "1px solid #334155"
-                        }}>{s}</span>
+                  {c.servicesOffered?.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {c.servicesOffered.map((s, i) => (
+                        <span key={i} className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">
+                          {s}
+                        </span>
                       ))}
                     </div>
                   )}
-                  {camp.patientsAttended > 0 && (
-                    <div style={{ marginTop: 6, fontSize: 12, color: "#10b981" }}>
-                      ✅ {camp.patientsAttended} patients attended
-                    </div>
+                  {c.healthWorker && (
+                    <p className="text-xs text-gray-400 mt-2">
+                      👨‍⚕️ {c.healthWorker.name} · {c.healthWorker.phone}
+                    </p>
                   )}
                 </div>
-                <span style={{
-                  padding: "4px 12px", borderRadius: 20, fontSize: 11, fontWeight: 600,
-                  background: (statusColors[camp.status] || "#64748b") + "22",
-                  color: statusColors[camp.status] || "#64748b",
-                }}>
-                  {camp.status}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Recent Reports */}
-      <div style={section}>
-        <h2 style={{ margin: "0 0 16px", fontSize: 16, fontWeight: 600, color: "#94a3b8" }}>
-          📋 Disease Reports ({reports.length})
-        </h2>
-        {reports.length === 0 ? (
-          <p style={{ color: "#475569", fontSize: 14 }}>No disease reports submitted yet.</p>
-        ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {reports.slice(0, 5).map((r) => (
-              <div key={r._id} style={{ background: "#1e293b", borderRadius: 10, padding: "14px 18px" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-                  <span style={{ fontWeight: 600, fontSize: 13 }}>
-                    {new Date(0, r.reportMonth - 1).toLocaleString("default", { month: "long" })} {r.reportYear}
-                  </span>
-                  {r.isReviewed && (
-                    <span style={{ fontSize: 11, color: "#10b981" }}>✔ Reviewed</span>
-                  )}
-                </div>
-                {r.diseases?.map(({ disease, affectedCount, recoveredCount, deathCount }, i) => (
-                  <div key={i} style={{ display: "flex", gap: 16, fontSize: 12, color: "#94a3b8", marginTop: 4 }}>
-                    <span style={{ color: "#e2e8f0", fontWeight: 500 }}>{disease?.name}</span>
-                    <span>😷 {affectedCount} affected</span>
-                    <span style={{ color: "#10b981" }}>✅ {recoveredCount} recovered</span>
-                    {deathCount > 0 && <span style={{ color: "#ef4444" }}>💀 {deathCount} deaths</span>}
-                  </div>
-                ))}
-                {r.generalObservations && (
-                  <p style={{ margin: "8px 0 0", fontSize: 12, color: "#64748b", fontStyle: "italic" }}>
-                    "{r.generalObservations}"
-                  </p>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Feedback CTA */}
-      {worker && (
-        <div style={{
-          textAlign: "center", padding: "24px",
-          background: "#0f172a", border: "1px dashed #334155", borderRadius: 12,
-        }}>
-          <p style={{ color: "#64748b", margin: "0 0 14px", fontSize: 14 }}>
-            Did you receive healthcare services in this village?
-          </p>
-          <button
-            onClick={() => navigate(`/feedback?workerId=${worker._id}&villageId=${id}`)}
-            style={{
-              padding: "10px 28px",
-              background: "#3b82f6", color: "#fff",
-              border: "none", borderRadius: 8,
-              fontSize: 14, fontWeight: 600, cursor: "pointer",
-            }}
-          >
-            Leave Feedback for {worker.name}
-          </button>
+              ))}
+            </div>
+          )}
         </div>
-      )}
+
+        {/* Feedback Button */}
+        {village?.assignedHealthWorker && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 text-center">
+            <p className="text-gray-600 text-sm mb-3">
+              Have feedback for the health worker?
+            </p>
+            {isLoggedIn ? (
+              <Link
+                to={`/feedback/${village.assignedHealthWorker._id}`}
+                className="inline-block bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-6 py-2.5 rounded-lg transition-colors"
+              >
+                Give Feedback
+              </Link>
+            ) : (
+              <Link
+                to="/login"
+                className="inline-block bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-6 py-2.5 rounded-lg transition-colors"
+              >
+                Login to Give Feedback
+              </Link>
+            )}
+          </div>
+        )}
+
+      </div>
     </div>
   );
 };

@@ -1,154 +1,221 @@
-import { useState, useEffect } from "react";
-import { useSearchParams, useNavigate } from "react-router-dom";
-import api from "../../services/api";
-import FeedbackForm from "../../components/forms/FeedbackForm";
+/* eslint-disable no-unused-vars */
+import { useState } from "react";
+import { useParams, useNavigate, Link } from "react-router-dom";
+import Navbar from "../../components/Navbar.jsx";
+import LoadingSpinner from "../../components/LoadingSpinner.jsx";
+import useFetch from "../../hooks/useFetch.js";
+import useAuth from "../../hooks/useAuth.js";
+import { submitFeedback, getWorkerRatingStats } from "../../services/feedback.service.js";
+import { getAllVillages } from "../../services/admin.service.js";
+import { FEEDBACK_CATEGORIES } from "../../utils/constants.js";
+import { roundToOne } from "../../utils/helpers.js";
 
+// ── Star Picker ───────────────────────────────────────────────────────────────
+const StarPicker = ({ value, onChange }) => (
+  <div className="flex gap-1">
+    {[1, 2, 3, 4, 5].map((s) => (
+      <button
+        key={s}
+        type="button"
+        onClick={() => onChange(s)}
+        className={`text-3xl transition-colors ${s <= value ? "text-yellow-400" : "text-gray-200 hover:text-yellow-300"}`}
+      >
+        ★
+      </button>
+    ))}
+  </div>
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
 const GiveFeedback = () => {
-  const [params]    = useSearchParams();
-  const navigate    = useNavigate();
-  const workerId    = params.get("workerId");
-  const villageId   = params.get("villageId");
-  const campId      = params.get("campId") || null;
+  const { workerId } = useParams();
+  const { user }     = useAuth();
+  const navigate     = useNavigate();
 
-  const [worker, setWorker]   = useState(null);
-  const [village, setVillage] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [success, setSuccess] = useState(false);
-  const [error, setError]     = useState("");
-  const [initLoading, setInitLoading] = useState(true);
+  const { data: ratingStats } = useFetch(() => getWorkerRatingStats(workerId), [workerId]);
+  const { data: villages }    = useFetch(getAllVillages);
 
-  useEffect(() => {
-    if (!workerId || !villageId) {
-      setError("Invalid feedback link — missing worker or village info.");
-      setInitLoading(false);
-      return;
-    }
-    Promise.all([
-      api.get(`/villages/${villageId}`),
-    ]).then(([vRes]) => {
-      setVillage(vRes.data.data);
-      const w = vRes.data.data?.assignedHealthWorker;
-      if (w) setWorker(w);
-    }).catch(() => setError("Could not load village info."))
-      .finally(() => setInitLoading(false));
-  }, [workerId, villageId]);
+  const [rating,      setRating]      = useState(0);
+  const [category,    setCategory]    = useState("Overall Experience");
+  const [message,     setMessage]     = useState("");
+  const [villageId,   setVillageId]   = useState("");
+  const [isAnonymous, setIsAnonymous] = useState(false);
+  const [submitting,  setSubmitting]  = useState(false);
+  const [success,     setSuccess]     = useState(false);
+  const [error,       setError]       = useState("");
 
-  const handleSubmit = async (payload) => {
-    setLoading(true);
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!rating) { setError("Please select a rating"); return; }
+    if (!message.trim()) { setError("Please write a message"); return; }
+    if (message.trim().length < 10) { setError("Message must be at least 10 characters"); return; }
+    if (!villageId) { setError("Please select your village"); return; }
+
+    setSubmitting(true);
     setError("");
     try {
-      await api.post("/feedback", payload);
+      await submitFeedback({
+        healthWorkerId: workerId,
+        villageId,
+        rating,
+        category,
+        message: message.trim(),
+        isAnonymous,
+      });
       setSuccess(true);
     } catch (err) {
-      setError(err.response?.data?.message || "Failed to submit feedback. Please try again.");
+      setError(err?.response?.data?.message || "Failed to submit feedback");
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
   };
 
-  if (initLoading) return (
-    <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "60vh", color: "#64748b" }}>
-      Loading...
-    </div>
-  );
-
-  if (error && !worker) return (
-    <div style={{ maxWidth: 500, margin: "80px auto", textAlign: "center", color: "#e2e8f0", padding: "0 20px" }}>
-      <div style={{ fontSize: 40, marginBottom: 16 }}>⚠️</div>
-      <p style={{ color: "#ef4444" }}>{error}</p>
-      <button onClick={() => navigate("/")} style={{
-        marginTop: 12, padding: "10px 24px",
-        background: "#3b82f6", color: "#fff",
-        border: "none", borderRadius: 8, cursor: "pointer", fontSize: 14
-      }}>
-        Go to Home
-      </button>
-    </div>
-  );
-
-  if (success) return (
-    <div style={{ maxWidth: 500, margin: "80px auto", textAlign: "center", color: "#e2e8f0", padding: "0 20px" }}>
-      <div style={{ fontSize: 64, marginBottom: 16 }}>🎉</div>
-      <h2 style={{ margin: "0 0 8px", fontWeight: 700 }}>Thank You!</h2>
-      <p style={{ color: "#64748b", marginBottom: 24 }}>
-        Your feedback has been submitted successfully. It helps us improve healthcare services.
-      </p>
-      <button onClick={() => navigate(`/village/${villageId}`)} style={{
-        padding: "10px 24px",
-        background: "#3b82f6", color: "#fff",
-        border: "none", borderRadius: 8, cursor: "pointer", fontSize: 14, fontWeight: 600,
-      }}>
-        Back to Village
-      </button>
-    </div>
-  );
+  if (success) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <Navbar />
+        <div className="max-w-md mx-auto px-4 py-20 text-center">
+          <div className="text-6xl mb-4">✅</div>
+          <h2 className="text-2xl font-bold text-gray-800 mb-2">Feedback Submitted!</h2>
+          <p className="text-gray-500 text-sm mb-6">
+            Thank you for your feedback. It helps improve healthcare services.
+          </p>
+          <Link
+            to="/"
+            className="inline-block bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-6 py-2.5 rounded-lg transition-colors"
+          >
+            Back to Home
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div style={{ maxWidth: 580, margin: "0 auto", padding: "32px 20px", color: "#e2e8f0" }}>
+    <div className="min-h-screen bg-gray-50">
+      <Navbar />
+      <div className="max-w-lg mx-auto px-4 py-8">
 
-      {/* Back */}
-      <button
-        onClick={() => navigate(-1)}
-        style={{ background: "none", border: "none", color: "#64748b", cursor: "pointer", fontSize: 14, marginBottom: 20 }}
-      >
-        ← Back
-      </button>
+        <Link to="/" className="text-sm text-blue-600 hover:underline mb-4 block">
+          ← Back
+        </Link>
 
-      {/* Header */}
-      <div style={{
-        background: "#0f172a", border: "1px solid #1e293b",
-        borderRadius: 12, padding: 24, marginBottom: 24
-      }}>
-        <h1 style={{ margin: "0 0 4px", fontSize: 20, fontWeight: 700 }}>Give Feedback</h1>
-        {village && (
-          <p style={{ margin: 0, color: "#64748b", fontSize: 13 }}>
-            {village.villageName} · {village.district}
-          </p>
-        )}
-        {worker && (
-          <div style={{
-            marginTop: 14, padding: "10px 14px",
-            background: "#1e293b", borderRadius: 8,
-            display: "flex", alignItems: "center", gap: 10
-          }}>
-            <div style={{
-              width: 36, height: 36, borderRadius: "50%",
-              background: "#1d4ed8", display: "flex", alignItems: "center",
-              justifyContent: "center", fontSize: 16, fontWeight: 700, color: "#fff", flexShrink: 0
-            }}>
-              {worker.name?.[0]?.toUpperCase()}
+        {/* Rating Summary */}
+        {ratingStats && ratingStats.totalFeedback > 0 && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 mb-6 flex items-center gap-4">
+            <div className="text-center">
+              <p className="text-4xl font-bold text-yellow-500">
+                {roundToOne(ratingStats.averageRating)}
+              </p>
+              <p className="text-xs text-gray-400">{ratingStats.totalFeedback} reviews</p>
             </div>
             <div>
-              <div style={{ fontWeight: 600, fontSize: 14 }}>{worker.name}</div>
-              {worker.qualification && (
-                <div style={{ fontSize: 12, color: "#64748b" }}>{worker.qualification}</div>
-              )}
+              <p className="font-semibold text-gray-800 text-sm">Worker Rating</p>
+              <div className="flex gap-0.5 mt-1">
+                {[1,2,3,4,5].map((s) => (
+                  <span key={s} className={s <= Math.round(ratingStats.averageRating) ? "text-yellow-400" : "text-gray-200"}>★</span>
+                ))}
+              </div>
             </div>
           </div>
         )}
-      </div>
 
-      {/* Form */}
-      <div style={{
-        background: "#0f172a", border: "1px solid #1e293b",
-        borderRadius: 12, padding: 24,
-      }}>
-        {error && (
-          <div style={{
-            background: "#7f1d1d22", border: "1px solid #ef4444",
-            borderRadius: 8, padding: "10px 14px",
-            color: "#ef4444", fontSize: 13, marginBottom: 16
-          }}>
-            {error}
-          </div>
-        )}
-        <FeedbackForm
-          onSubmit={handleSubmit}
-          healthWorkerId={workerId}
-          villageId={villageId}
-          relatedCamp={campId}
-          loading={loading}
-        />
+        {/* Feedback Form */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <h1 className="text-xl font-bold text-gray-800 mb-1">Give Feedback</h1>
+          <p className="text-gray-500 text-sm mb-6">Share your experience with the health worker</p>
+
+          {error && (
+            <div className="bg-red-50 border border-red-200 text-red-600 text-sm rounded-lg px-4 py-3 mb-4">
+              {error}
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} className="space-y-5">
+
+            {/* Rating */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Rating <span className="text-red-500">*</span>
+              </label>
+              <StarPicker value={rating} onChange={setRating} />
+              {rating > 0 && (
+                <p className="text-xs text-gray-400 mt-1">
+                  {["","Very Poor","Poor","Average","Good","Excellent"][rating]}
+                </p>
+              )}
+            </div>
+
+            {/* Category */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+              <select
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                {FEEDBACK_CATEGORIES.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Village */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Your Village <span className="text-red-500">*</span>
+              </label>
+              <select
+                value={villageId}
+                onChange={(e) => setVillageId(e.target.value)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">-- Select Village --</option>
+                {villages?.map((v) => (
+                  <option key={v._id} value={v._id}>
+                    {v.villageName} — {v.district}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Message */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Message <span className="text-red-500">*</span>
+              </label>
+              <textarea
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                rows={4}
+                placeholder="Share your experience... (min 10 characters)"
+                maxLength={500}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+              />
+              <p className="text-xs text-gray-400 text-right mt-1">{message.length}/500</p>
+            </div>
+
+            {/* Anonymous */}
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={isAnonymous}
+                onChange={(e) => setIsAnonymous(e.target.checked)}
+                className="w-4 h-4 text-blue-600 rounded"
+              />
+              <span className="text-sm text-gray-600">Submit anonymously</span>
+            </label>
+
+            <button
+              type="submit"
+              disabled={submitting || !rating}
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-lg transition-colors disabled:opacity-60 text-sm"
+            >
+              {submitting ? "Submitting..." : "Submit Feedback"}
+            </button>
+          </form>
+        </div>
+
       </div>
     </div>
   );
